@@ -14,7 +14,6 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # Tesseract and Poppler paths
 pytesseract.pytesseract.tesseract_cmd = r"C:\Users\khanna-arnav\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-poppler_path = r"C:\Program Files (x86)\poppler-24.08.0\Library\bin"
 
 @app.route('/')
 def index():
@@ -48,12 +47,12 @@ def upload():
         end_page = min(start_page + 2, total_pages)
         try:
             images = convert_from_path(
-                filepath,
-                dpi=300,
-                first_page=start_page,
-                last_page=end_page,
-                poppler_path=poppler_path
-            )
+            filepath,
+            dpi=300,
+            first_page=start_page,
+            last_page=end_page
+        )
+
         except Exception as e:
             print(f"❌ Failed to convert pages {start_page}-{end_page}: {e}")
             continue
