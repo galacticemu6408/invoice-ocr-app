@@ -2,4 +2,4 @@ Flask
 gunicorn
 pytesseract
 pdf2image
-openpyx1
+openpyxl
