@@ -1,0 +1,89 @@
+from flask import Flask, render_template, request, send_file
+import os
+import pytesseract
+from pdf2image import convert_from_path
+from openpyxl import Workbook
+import re
+from subprocess import check_output
+
+app = Flask(__name__)
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "output"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+# Tesseract and Poppler paths
+pytesseract.pytesseract.tesseract_cmd = r"C:\Users\khanna-arnav\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+poppler_path = r"C:\Program Files (x86)\poppler-24.08.0\Library\bin"
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/upload', methods=['POST'])
+def upload():
+    if 'file' not in request.files:
+        return render_template('message.html', message="❌ No file uploaded")
+
+    file = request.files['file']
+    if file.filename == '':
+        return render_template('message.html', message="❌ No selected file")
+
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(filepath)
+
+    try:
+        info = check_output([os.path.join(poppler_path, "pdfinfo.exe"), filepath]).decode("utf-8")
+        total_pages = int(re.search(r'Pages:\s+(\d+)', info).group(1))
+    except Exception as e:
+        return render_template('message.html', message=f"❌ Could not read PDF: {e}")
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Check-Invoice Mapping"
+    sheet.append(["Payment Serial Number", "Invoice Number(s)"])
+    found_any = False
+
+    for start_page in range(1, total_pages + 1, 3):
+        end_page = min(start_page + 2, total_pages)
+        try:
+            images = convert_from_path(
+                filepath,
+                dpi=300,
+                first_page=start_page,
+                last_page=end_page,
+                poppler_path=poppler_path
+            )
+        except Exception as e:
+            print(f"❌ Failed to convert pages {start_page}-{end_page}: {e}")
+            continue
+
+        serial_number = None
+        invoice_numbers = []
+
+        if len(images) >= 1:
+            text1 = pytesseract.image_to_string(images[0])
+            match = re.search(r'Payment Serial Number\s*:\s*(\d+)', text1)
+            if match:
+                serial_number = match.group(1)
+
+        if len(images) >= 3:
+            text3 = pytesseract.image_to_string(images[2])
+            invoice_matches = re.findall(r'\b\d{5,}\b', text3)
+            invoice_numbers = invoice_matches
+
+        if serial_number:
+            sheet.append([serial_number, ", ".join(invoice_numbers)])
+            found_any = True
+
+    output_filename = os.path.splitext(file.filename)[0] + "_output.xlsx"
+    output_path = os.path.join(OUTPUT_FOLDER, output_filename)
+    workbook.save(output_path)
+
+    if found_any:
+        return send_file(output_path, as_attachment=True)
+    else:
+        return render_template('message.html', message="✅ Uploaded but no serial numbers found — probably a dummy file.<br><br><a href='/'>⬅️ Go back and upload another</a>")
+
+if __name__ == '__main__':
+    app.run(debug=True)
