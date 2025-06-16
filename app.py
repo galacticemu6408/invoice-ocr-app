@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, send_file
+from werkzeug.utils import secure_filename
 import os
 import pytesseract
 from pdf2image import convert_from_path
@@ -27,7 +28,12 @@ def upload():
     if file.filename == '':
         return render_template('message.html', message="No selected file")
 
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    # Sanitize the filename to prevent directory traversal
+    filename = secure_filename(file.filename)
+    if filename == "":
+        return render_template('message.html', message="Invalid filename")
+
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
 
     try:
@@ -77,7 +83,7 @@ def upload():
             sheet.append([serial_number, ", ".join(invoice_numbers)])
 
     # ✅ Save Excel file
-    output_filename = os.path.splitext(file.filename)[0] + "_output.xlsx"
+    output_filename = os.path.splitext(filename)[0] + "_output.xlsx"
     output_path = os.path.join(OUTPUT_FOLDER, output_filename)
     workbook.save(output_path)
 
